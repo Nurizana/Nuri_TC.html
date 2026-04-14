@@ -22,22 +22,30 @@
         }
 
         /* General Legend Styling */
-        .info.legend, .info.radar-legend {
+        .info.legend, .info.layer-legend {
             background: white;
             padding: 10px 15px;
             border: 2px solid rgba(0,0,0,0.2);
             border-radius: 5px;
-            line-height: 24px;
+            line-height: 22px;
             color: #333;
             font-family: Arial, sans-serif;
             font-size: 13px;
             box-shadow: 0 1px 5px rgba(0,0,0,0.4);
-            margin-bottom: 10px; /* Space between stacked legends */
+            margin-bottom: 10px;
+            min-width: 150px;
         }
         .info h4 {
             margin: 0 0 5px 0;
             font-size: 14px;
             font-weight: bold;
+        }
+        .info .timestamp {
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 4px;
         }
         .info i {
             width: 18px;
@@ -49,17 +57,33 @@
         }
 
         /* Legend Color Blocks */
-        .legend-tc { background: transparent; border: 3px dashed #ff3300; } /* Hollow with thick border */
+        .legend-tc { background: transparent; border: 3px dashed #ff3300; } 
         .legend-grid { background: #fff; border: 2px solid #ccc; }
         
         /* Radar Color Blocks */
-        .color-heavy { background: #FF00FF; } /* Magenta */
-        .color-vstrong { background: #FF0000; } /* Red */
-        .color-strong { background: #FF9900; } /* Orange */
-        .color-mod { background: #FFFF00; } /* Yellow */
-        .color-light { background: #00FF00; } /* Green */
-        .color-vlight { background: #00FFFF; } /* Cyan */
-        .color-trace { background: #0000FF; } /* Blue */
+        .color-heavy { background: #FF00FF; }
+        .color-vstrong { background: #FF0000; }
+        .color-strong { background: #FF9900; }
+        .color-mod { background: #FFFF00; }
+        .color-light { background: #00FF00; }
+        .color-vlight { background: #00FFFF; }
+        .color-trace { background: #0000FF; }
+        
+        /* Satellite Gradient */
+        .sat-gradient {
+            width: 100%;
+            height: 12px;
+            background: linear-gradient(to right, #333, #aaa, #fff);
+            border: 1px solid #ccc;
+            margin: 5px 0;
+            border-radius: 2px;
+        }
+        .sat-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: #555;
+        }
     </style>
 </head>
 <body>
@@ -74,12 +98,14 @@
         const tcZoneLayer = L.layerGroup();
         const gridLayer = L.layerGroup();
         const radarLayer = L.layerGroup(); 
+        const satLayer = L.layerGroup(); // NEW: Satellite Group
 
         // 2. INITIALIZE MAP
         const map = L.map('map', {
             center: [10, 112.5],
             zoom: 5,
-            layers: [basemapGroup, tcZoneLayer, gridLayer, radarLayer] // All ON by default
+            // Satellite is omitted from default layers so it doesn't clutter the map instantly, but available in toggle
+            layers: [basemapGroup, tcZoneLayer, gridLayer, radarLayer] 
         });
 
         // 3. ADD BASE MAPS (Ocean Base + Labels)
@@ -92,13 +118,13 @@
             maxZoom: 13
         }).addTo(basemapGroup);
 
-        // 4. ADD MET MALAYSIA TC WATCH ZONE (Updated to be hollow and thicker)
+        // 4. ADD MET MALAYSIA TC WATCH ZONE
         const tcWatchBounds = [[0, 95], [20, 130]];
         L.rectangle(tcWatchBounds, {
             color: "#ff3300",
-            weight: 4,              // Thicker line
-            fillOpacity: 0,         // Made completely transparent/hollow
-            dashArray: '8, 8'       // Adjusted dash spacing for the thicker line
+            weight: 4,              
+            fillOpacity: 0,         
+            dashArray: '8, 8'       
         })
         .bindTooltip("MET Malaysia Tropical Cyclone Watch Zone", { sticky: true })
         .addTo(tcZoneLayer);
@@ -119,39 +145,72 @@
              .addTo(gridLayer);
         }
 
-        // 6. FETCH & ADD LIVE WEATHER RADAR
+        // Global variables to store timestamps for the toggles
+        let radarTimeStr = "Fetching...";
+        let satTimeStr = "Fetching...";
+
+        // Helper function to inject time into DOM (useful if user toggles legend off and on)
+        function updateLegendTimes() {
+            const rEl = document.getElementById('radar-time');
+            if (rEl) rEl.innerText = radarTimeStr;
+            
+            const sEl = document.getElementById('sat-time');
+            if (sEl) sEl.innerText = satTimeStr;
+        }
+
+        // 6. FETCH & ADD LIVE WEATHER RADAR & SATELLITE
         fetch('https://api.rainviewer.com/public/weather-maps.json')
             .then(response => response.json())
             .then(data => {
-                const pastFrames = data.radar.past;
-                const stableFrame = pastFrames[pastFrames.length - 2]; 
-                const radarTileUrl = `${data.host}${stableFrame.path}/256/{z}/{x}/{y}/2/1_1.png`;
-                
+                // A. Radar Setup
+                const pastRadarFrames = data.radar.past;
+                const stableRadarFrame = pastRadarFrames[pastRadarFrames.length - 2]; 
+                radarTimeStr = new Date(stableRadarFrame.time * 1000).toLocaleString(); // Convert to local time
+
+                const radarTileUrl = `${data.host}${stableRadarFrame.path}/256/{z}/{x}/{y}/2/1_1.png`;
                 const radarTileLayer = L.tileLayer(radarTileUrl, {
                     opacity: 0.7,
-                    attribution: 'Radar Data &copy; <a href="https://www.rainviewer.com/" target="_blank">RainViewer</a>',
+                    attribution: 'Radar &copy; <a href="https://www.rainviewer.com/" target="_blank">RainViewer</a>',
                     zIndex: 1000 
                 });
-                
                 radarLayer.addLayer(radarTileLayer);
-            })
-            .catch(err => console.error("Error loading radar data: ", err));
 
-        // 7. ADD LAYER CONTROL (Top Right Menu)
+                // B. Satellite Setup
+                if (data.satellite && data.satellite.infrared) {
+                    const pastSatFrames = data.satellite.infrared;
+                    const latestSatFrame = pastSatFrames[pastSatFrames.length - 1];
+                    satTimeStr = new Date(latestSatFrame.time * 1000).toLocaleString();
+
+                    // Color scheme 0 is standard grayscale IR
+                    const satTileUrl = `${data.host}${latestSatFrame.path}/256/{z}/{x}/{y}/0/1_1.png`;
+                    const satTileLayer = L.tileLayer(satTileUrl, {
+                        opacity: 0.55,
+                        attribution: 'Satellite &copy; RainViewer',
+                        zIndex: 900 // Placed under radar
+                    });
+                    satLayer.addLayer(satTileLayer);
+                }
+
+                updateLegendTimes();
+            })
+            .catch(err => console.error("Error loading weather data: ", err));
+
+        // 7. ADD LAYER CONTROL
         const baseMaps = {
             "Ocean Basemap": basemapGroup
         };
         const overlayMaps = {
-            "Live Radar Data": radarLayer,
+            "Live Radar": radarLayer,
+            "Live Satellite (IR)": satLayer, // Added to toggle menu
             "MET Malaysia TC Zone": tcZoneLayer,
             "5-Degree Grid": gridLayer
         };
         L.control.layers(baseMaps, overlayMaps, { position: 'topright' }).addTo(map);
 
-        // 8. ADD MAIN LEGEND (Always visible)
+        // 8. ADD MAIN LEGEND
         const mainLegend = L.control({ position: 'bottomright' });
         mainLegend.onAdd = function (map) {
-            const div = L.DomUtil.create('div', 'info legend');
+            const div = L.DomUtil.create('div', 'info layer-legend');
             div.innerHTML = `
                 <h4>Map Layers</h4>
                 <i class="legend-tc"></i> TC Watch Zone<br>
@@ -161,12 +220,13 @@
         };
         mainLegend.addTo(map);
 
-        // 9. ADD SEPARATE RADAR LEGEND (Toggled)
+        // 9. RADAR LEGEND (With Timestamp)
         const radarLegend = L.control({ position: 'bottomright' });
         radarLegend.onAdd = function (map) {
-            const div = L.DomUtil.create('div', 'info radar-legend');
+            const div = L.DomUtil.create('div', 'info layer-legend');
             div.innerHTML = `
                 <h4>Rainfall (mm/h)</h4>
+                <div class="timestamp">Updated: <span id="radar-time">Fetching...</span></div>
                 <i class="color-heavy"></i> 50+ (Extreme)<br>
                 <i class="color-vstrong"></i> 20 - 50<br>
                 <i class="color-strong"></i> 10 - 20<br>
@@ -177,18 +237,42 @@
             `;
             return div;
         };
-        // Add radar legend initially since radar layer is ON by default
-        radarLegend.addTo(map);
+        radarLegend.addTo(map); // Default ON
 
-        // 10. TOGGLE RADAR LEGEND ON/OFF based on layer control checkbox
+        // 10. SATELLITE LEGEND (With Timestamp)
+        const satLegend = L.control({ position: 'bottomright' });
+        satLegend.onAdd = function (map) {
+            const div = L.DomUtil.create('div', 'info layer-legend');
+            div.innerHTML = `
+                <h4>Satellite (IR)</h4>
+                <div class="timestamp">Updated: <span id="sat-time">Fetching...</span></div>
+                <div class="sat-gradient"></div>
+                <div class="sat-labels">
+                    <span>Warm / Clear</span>
+                    <span>Cold / Clouds</span>
+                </div>
+            `;
+            return div;
+        };
+
+        // 11. TOGGLE LEGENDS based on layer control checkbox
         map.on('overlayadd', function(eventLayer) {
-            if (eventLayer.name === 'Live Radar Data') {
+            if (eventLayer.name === 'Live Radar') {
                 radarLegend.addTo(map);
+                updateLegendTimes(); // Re-apply time if DOM element was recreated
+            }
+            if (eventLayer.name === 'Live Satellite (IR)') {
+                satLegend.addTo(map);
+                updateLegendTimes(); 
             }
         });
+        
         map.on('overlayremove', function(eventLayer) {
-            if (eventLayer.name === 'Live Radar Data') {
+            if (eventLayer.name === 'Live Radar') {
                 map.removeControl(radarLegend);
+            }
+            if (eventLayer.name === 'Live Satellite (IR)') {
+                map.removeControl(satLegend);
             }
         });
 
