@@ -8,11 +8,11 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
-        /* Make the map take up the full screen */
+        /* Map Layout */
         body { padding: 0; margin: 0; }
         html, body, #map { height: 100%; width: 100%; background-color: #000; }
         
-        /* Custom styling for the grid label tooltips */
+        /* Grid Label Tooltips */
         .leaflet-tooltip.grid-label {
             background-color: rgba(255, 255, 255, 0.9);
             border: 1px solid #00508A;
@@ -20,6 +20,35 @@
             color: #00508A;
             box-shadow: 0 1px 3px rgba(0,0,0,0.4);
         }
+
+        /* Legend Styling */
+        .info.legend {
+            background: white;
+            padding: 10px 15px;
+            border: 2px solid rgba(0,0,0,0.2);
+            border-radius: 5px;
+            line-height: 24px;
+            color: #333;
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+        }
+        .info.legend h4 {
+            margin: 0 0 5px 0;
+            font-size: 15px;
+            font-weight: bold;
+        }
+        .info.legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            border-radius: 2px;
+        }
+        /* Legend Color Blocks */
+        .legend-tc { background: rgba(255, 51, 0, 0.2); border: 2px dashed #ff3300; }
+        .legend-grid { background: #fff; border: 2px solid #ccc; }
+        .legend-radar { background: linear-gradient(to right, #00ffff, #00ff00, #ffff00, #ff0000, #ff00ff); }
     </style>
 </head>
 <body>
@@ -29,20 +58,30 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <script>
-        // 1. Initialize Map
-        const map = L.map('map').setView([10, 112.5], 5);
+        // 1. CREATE LAYER GROUPS (Needed for the toggle menu)
+        const basemapGroup = L.layerGroup();
+        const tcZoneLayer = L.layerGroup();
+        const gridLayer = L.layerGroup();
+        const radarLayer = L.layerGroup(); // Kept empty initially, filled by API later
 
-        // 2. Add Base Map: Blue Ocean with Labels
+        // 2. INITIALIZE MAP (Adding all layer groups so they are turned ON by default)
+        const map = L.map('map', {
+            center: [10, 112.5],
+            zoom: 5,
+            layers: [basemapGroup, tcZoneLayer, gridLayer, radarLayer] 
+        });
+
+        // 3. ADD BASE MAPS (Ocean Base + Labels)
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}', {
             attribution: 'Tiles &copy; Esri',
             maxZoom: 13
-        }).addTo(map);
+        }).addTo(basemapGroup);
         
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}', {
             maxZoom: 13
-        }).addTo(map);
+        }).addTo(basemapGroup);
 
-        // 3. Create MET Malaysia Tropical Cyclone Watch Zone
+        // 4. ADD MET MALAYSIA TC WATCH ZONE
         const tcWatchBounds = [[0, 95], [20, 130]];
         L.rectangle(tcWatchBounds, {
             color: "#ff3300",
@@ -52,41 +91,71 @@
             dashArray: '5, 5'
         })
         .bindTooltip("MET Malaysia Tropical Cyclone Watch Zone", { sticky: true })
-        .addTo(map);
+        .addTo(tcZoneLayer);
 
-        // 4. Create 5-Degree Grid
-        const gridStyle = { color: '#ffffff', weight: 1, opacity: 0.35 };
+        // 5. ADD 5-DEGREE GRID
+        const gridStyle = { color: '#ffffff', weight: 1, opacity: 0.4 };
         
         for (let lat = -85; lat <= 85; lat += 5) {
             let label = lat === 0 ? "Equator" : (lat > 0 ? lat + "°N" : Math.abs(lat) + "°S");
             L.polyline([[lat, -180], [lat, 180]], gridStyle)
              .bindTooltip(label, { sticky: true, className: 'grid-label' })
-             .addTo(map);
+             .addTo(gridLayer);
         }
-        
         for (let lng = -180; lng <= 180; lng += 5) {
             let label = lng === 0 ? "Prime Meridian" : (lng > 0 ? lng + "°E" : Math.abs(lng) + "°W");
             L.polyline([[-90, lng], [90, lng]], gridStyle)
              .bindTooltip(label, { sticky: true, className: 'grid-label' })
-             .addTo(map);
+             .addTo(gridLayer);
         }
 
-        // 5. Fetch and Add Live Weather Radar Data
+        // 6. FETCH & ADD LIVE WEATHER RADAR
         fetch('https://api.rainviewer.com/public/weather-maps.json')
             .then(response => response.json())
             .then(data => {
+                // Grab the second-to-last frame to ensure the data is fully processed by the server
                 const pastFrames = data.radar.past;
-                const latestFrame = pastFrames[pastFrames.length - 1];
+                const stableFrame = pastFrames[pastFrames.length - 2]; 
                 
-                const radarUrl = `https://tilecache.rainviewer.com/v2/radar/${latestFrame.time}/256/{z}/{x}/{y}/2/1_1.png`;
+                // Construct URL using the host and path provided by the API
+                const radarTileUrl = `${data.host}${stableFrame.path}/256/{z}/{x}/{y}/2/1_1.png`;
                 
-                L.tileLayer(radarUrl, {
-                    opacity: 0.65,
+                // Create the layer and add it to our radarLayer group
+                const radarTileLayer = L.tileLayer(radarTileUrl, {
+                    opacity: 0.7,
                     attribution: 'Radar Data &copy; <a href="https://www.rainviewer.com/" target="_blank">RainViewer</a>',
-                    zIndex: 1000
-                }).addTo(map);
+                    zIndex: 1000 // Forces radar to draw on top of everything else
+                });
+                
+                radarLayer.addLayer(radarTileLayer);
             })
             .catch(err => console.error("Error loading radar data: ", err));
+
+        // 7. ADD LAYER CONTROL (Top Right Menu)
+        const baseMaps = {
+            "Ocean Basemap": basemapGroup
+        };
+        const overlayMaps = {
+            "Live Radar Data": radarLayer,
+            "MET Malaysia TC Zone": tcZoneLayer,
+            "5-Degree Grid": gridLayer
+        };
+        L.control.layers(baseMaps, overlayMaps, { position: 'topright' }).addTo(map);
+
+        // 8. ADD LEGEND (Bottom Right)
+        const legend = L.control({ position: 'bottomright' });
+        legend.onAdd = function (map) {
+            const div = L.DomUtil.create('div', 'info legend');
+            div.innerHTML = `
+                <h4>Map Legend</h4>
+                <i class="legend-radar"></i> Live Radar Intensity<br>
+                <i class="legend-tc"></i> TC Watch Zone<br>
+                <i class="legend-grid"></i> 5-Degree Grid Line
+            `;
+            return div;
+        };
+        legend.addTo(map);
+
     </script>
 </body>
 </html>
