@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nuri_TC Live Radar & Watch Zone</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        /* Make the map take up the full screen */
+        body { padding: 0; margin: 0; }
+        html, body, #map { height: 100%; width: 100%; background-color: #000; }
+        
+        /* Custom styling for the grid label tooltips */
+        .leaflet-tooltip.grid-label {
+            background-color: rgba(255, 255, 255, 0.9);
+            border: 1px solid #00508A;
+            font-weight: bold;
+            color: #00508A;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // 1. Initialize Map
+        const map = L.map('map').setView([10, 112.5], 5);
+
+        // 2. Add Base Map: Blue Ocean with Labels
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri',
+            maxZoom: 13
+        }).addTo(map);
+        
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 13
+        }).addTo(map);
+
+        // 3. Create MET Malaysia Tropical Cyclone Watch Zone
+        const tcWatchBounds = [[0, 95], [20, 130]];
+        L.rectangle(tcWatchBounds, {
+            color: "#ff3300",
+            weight: 2,
+            fillColor: "#ff3300",
+            fillOpacity: 0.1,
+            dashArray: '5, 5'
+        })
+        .bindTooltip("MET Malaysia Tropical Cyclone Watch Zone", { sticky: true })
+        .addTo(map);
+
+        // 4. Create 5-Degree Grid
+        const gridStyle = { color: '#ffffff', weight: 1, opacity: 0.35 };
+        
+        for (let lat = -85; lat <= 85; lat += 5) {
+            let label = lat === 0 ? "Equator" : (lat > 0 ? lat + "°N" : Math.abs(lat) + "°S");
+            L.polyline([[lat, -180], [lat, 180]], gridStyle)
+             .bindTooltip(label, { sticky: true, className: 'grid-label' })
+             .addTo(map);
+        }
+        
+        for (let lng = -180; lng <= 180; lng += 5) {
+            let label = lng === 0 ? "Prime Meridian" : (lng > 0 ? lng + "°E" : Math.abs(lng) + "°W");
+            L.polyline([[-90, lng], [90, lng]], gridStyle)
+             .bindTooltip(label, { sticky: true, className: 'grid-label' })
+             .addTo(map);
+        }
+
+        // 5. Fetch and Add Live Weather Radar Data
+        fetch('https://api.rainviewer.com/public/weather-maps.json')
+            .then(response => response.json())
+            .then(data => {
+                const pastFrames = data.radar.past;
+                const latestFrame = pastFrames[pastFrames.length - 1];
+                
+                const radarUrl = `https://tilecache.rainviewer.com/v2/radar/${latestFrame.time}/256/{z}/{x}/{y}/2/1_1.png`;
+                
+                L.tileLayer(radarUrl, {
+                    opacity: 0.65,
+                    attribution: 'Radar Data &copy; <a href="https://www.rainviewer.com/" target="_blank">RainViewer</a>',
+                    zIndex: 1000
+                }).addTo(map);
+            })
+            .catch(err => console.error("Error loading radar data: ", err));
+    </script>
+</body>
+</html>
