@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nuri_TC JMA Track & Live Weather</title>
+    <title>Nuri_TC Live Radar & Watch Zone</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
@@ -12,58 +12,13 @@
         body { padding: 0; margin: 0; }
         html, body, #map { height: 100%; width: 100%; background-color: #000; }
         
-        /* Grid Label Tooltips (Hover) */
+        /* Grid Label Tooltips */
         .leaflet-tooltip.grid-label {
             background-color: rgba(255, 255, 255, 0.9);
             border: 1px solid #00508A;
             font-weight: bold;
             color: #00508A;
             box-shadow: 0 1px 3px rgba(0,0,0,0.4);
-            font-size: 11px;
-            padding: 3px;
-        }
-
-        /* JMA Info Panel Popup Styles (Verbatim Table) */
-        .jma-popup-content {
-            font-family: Arial, sans-serif;
-            font-size: 13px;
-            color: #333;
-            width: 380px;
-            max-width: 100%;
-        }
-        .jma-popup-content h3 {
-            margin: 0 0 5px 0;
-            font-size: 16px;
-            font-weight: bold;
-            color: #000;
-        }
-        .jma-popup-content .issued-date {
-            font-size: 12px;
-            color: #555;
-            margin-bottom: 8px;
-        }
-        .jma-popup-content table {
-            width: 100%;
-            border-collapse: collapse;
-            border: 1px solid #ddd;
-            background-color: #fcfcfc;
-        }
-        .jma-popup-content table caption {
-            font-weight: bold;
-            color: #000;
-            padding: 5px;
-            border-bottom: 1px solid #ddd;
-            background-color: #f5f5f5;
-        }
-        .jma-popup-content th, .jma-popup-content td {
-            text-align: left;
-            padding: 5px 8px;
-            border-bottom: 1px solid #eee;
-        }
-        .jma-popup-content th {
-            font-weight: bold;
-            color: #555;
-            white-space: nowrap;
         }
 
         /* General Legend Styling */
@@ -94,35 +49,17 @@
         }
 
         /* Legend Color Blocks */
-        .legend-jma { background: transparent; border: 2px solid #ffff00; } /* Yellow solid */
-        .legend-jma-forecast { background: transparent; border: 2px solid #ff0000; } /* Red solid */
         .legend-tc { background: transparent; border: 3px dashed #ff3300; } /* Hollow with thick border */
         .legend-grid { background: #fff; border: 2px solid #ccc; }
         
         /* Radar Color Blocks */
-        .color-heavy { background: #FF00FF; }
-        .color-vstrong { background: #FF0000; }
-        .color-strong { background: #FF9900; }
-        .color-mod { background: #FFFF00; }
-        .color-light { background: #00FF00; }
-        .color-vlight { background: #00FFFF; }
-        .color-trace { background: #0000FF; }
-
-        /* Custom DivIcon for Forecast Points Date/Time Labels */
-        .leaflet-div-icon.jma-forecast-label {
-            background: rgba(255, 255, 255, 0.85);
-            border: 1px solid #ffff00;
-            border-radius: 4px;
-            color: #000;
-            font-weight: bold;
-            font-size: 11px;
-            line-height: 1.2;
-            padding: 2px;
-            width: auto !important;
-            height: auto !important;
-            text-align: center;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.4);
-        }
+        .color-heavy { background: #FF00FF; } /* Magenta */
+        .color-vstrong { background: #FF0000; } /* Red */
+        .color-strong { background: #FF9900; } /* Orange */
+        .color-mod { background: #FFFF00; } /* Yellow */
+        .color-light { background: #00FF00; } /* Green */
+        .color-vlight { background: #00FFFF; } /* Cyan */
+        .color-trace { background: #0000FF; } /* Blue */
     </style>
 </head>
 <body>
@@ -134,16 +71,15 @@
     <script>
         // 1. CREATE LAYER GROUPS
         const basemapGroup = L.layerGroup();
-        const jmaTrackLayer = L.layerGroup(); // Group for JMA past and forecast track data
         const tcZoneLayer = L.layerGroup();
         const gridLayer = L.layerGroup();
         const radarLayer = L.layerGroup(); 
 
         // 2. INITIALIZE MAP
         const map = L.map('map', {
-            center: [20, 145], // Center closer to the storm activity in image_6.png
+            center: [10, 112.5],
             zoom: 5,
-            layers: [basemapGroup, jmaTrackLayer, tcZoneLayer, gridLayer, radarLayer] // All ON by default
+            layers: [basemapGroup, tcZoneLayer, gridLayer, radarLayer] // All ON by default
         });
 
         // 3. ADD BASE MAPS (Ocean Base + Labels)
@@ -167,7 +103,7 @@
         .bindTooltip("MET Malaysia Tropical Cyclone Watch Zone", { sticky: true })
         .addTo(tcZoneLayer);
 
-        // 5. ADD 5-DEGREE GRID with Hover Tooltips
+        // 5. ADD 5-DEGREE GRID
         const gridStyle = { color: '#ffffff', weight: 1, opacity: 0.4 };
         
         for (let lat = -85; lat <= 85; lat += 5) {
@@ -201,118 +137,23 @@
             })
             .catch(err => console.error("Error loading radar data: ", err));
 
-        // 7. NEW: ADD JMA TROPICAL CYCLONE TRACK (SINLAKU) - Illustrative and Manual Replica
-        
-        // Define specific illustrative points for the past track (Yellow solid line)
-        const pastTrackPoints = [
-            [15.5, 140.0],
-            [17.8, 142.5],
-            [20.0, 145.0] // Current analysis point
-        ];
-        L.polyline(pastTrackPoints, { color: '#ffff00', weight: 3, opacity: 0.9 }).addTo(jmaTrackLayer);
-
-        // Define specific illustrative forecast center points for markers (matching image sequence)
-        const forecastMarkerPoints = [
-            [23.0, 147.0], // 04/15 03 UTC illustrative center point
-            [26.5, 149.0], // 04/16 03 UTC illustrative center point
-            [30.0, 151.0]  // 04/18 00 UTC illustrative center point
-        ];
-
-        // Draw the illustrative Forecast Track Envelope (Red solid cone outline lines)
-        const forecastEnvelopeLeft = [ [20, 145], [23.5, 146], [27.0, 147.5], [31.0, 149] ];
-        const forecastEnvelopeRight = [ [20, 145], [22.5, 148], [26.0, 150.5], [29.0, 153] ];
-        L.polyline(forecastEnvelopeLeft, { color: '#ff0000', weight: 3, opacity: 0.9 }).addTo(jmaTrackLayer);
-        L.polyline(forecastEnvelopeRight, { color: '#ff0000', weight: 3, opacity: 0.9 }).addTo(jmaTrackLayer);
-
-        // Add distinct JMA markers and date/time labels
-        
-        // 7.1 Past Track Marker (Illustrative red/white point marker style)
-        L.circleMarker([20.0, 145.0], { radius: 10, color: '#ff0000', fillColor: '#fff', fillOpacity: 0.9, weight: 2 }).addTo(jmaTrackLayer);
-
-        // 7.2 Forecast Point Markers with DivIcon Labels
-        
-        // Marker 1: 04/15 03 UTC (illustrative yellow circular cone style)
-        L.circleMarker(forecastMarkerPoints[0], { radius: 12, color: '#ffff00', fillColor: 'transparent', weight: 2 }).addTo(jmaTrackLayer);
-        // Date/Time Label for Marker 1
-        L.marker(forecastMarkerPoints[0], {
-            icon: L.divIcon({
-                className: 'jma-forecast-label',
-                html: '04/15 03 UTC'
-            })
-        }).addTo(jmaTrackLayer);
-
-        // Marker 2: 04/16 03 UTC (illustrative larger yellow circular cone style)
-        L.circleMarker(forecastMarkerPoints[1], { radius: 16, color: '#ffff00', fillColor: 'transparent', weight: 2 }).addTo(jmaTrackLayer);
-        // Date/Time Label for Marker 2
-        L.marker(forecastMarkerPoints[1], {
-            icon: L.divIcon({
-                className: 'jma-forecast-label',
-                html: '04/16 03 UTC'
-            })
-        }).addTo(jmaTrackLayer);
-
-        // Marker 3: 04/18 00 UTC (illustrative larger yellow circular cone style)
-        L.circleMarker(forecastMarkerPoints[2], { radius: 20, color: '#ffff00', fillColor: 'transparent', weight: 2 }).addTo(jmaTrackLayer);
-        // Date/Time Label for Marker 3
-        L.marker(forecastMarkerPoints[2], {
-            icon: L.divIcon({
-                className: 'jma-forecast-label',
-                html: '04/18 00 UTC'
-            })
-        }).addTo(jmaTrackLayer);
-
-        // 7.3 Main Marker Popup: Verbatim Replica of JMA Info Panel table
-        
-        // Marker for Analysis point to hold the detailed pop-up
-        const jmaInfoMarker = L.marker([20.0, 145.0], { opacity: 0 }) // Invisible marker, just for the popup
-            .addTo(jmaTrackLayer);
-
-        // Build the HTML content for the verbatim table popup
-        const jmaPopupContent = `
-            <div class="jma-popup-content">
-                <h3>T2604(Sinlaku)</h3>
-                <p class="issued-date">Issued at 2026/04/14 03:45 UTC</p>
-                <table>
-                    <caption>Analysis at 04/14 03 UTC</caption>
-                    <tbody>
-                        <tr><th>Grade</th><td>TY</td></tr>
-                        <tr><th>Scale</th><td>Large</td></tr>
-                        <tr><th>Intensity</th><td>Violent</td></tr>
-                        <tr><th>Central pressure</th><td>920 hPa</td></tr>
-                        <tr><th>Maximum sustained wind speed near center</th><td>55 m/s (105 kt)</td></tr>
-                        <tr><th>Maximum wind gust speed</th><td>75 m/s (150 kt)</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        `;
-
-        // Bind and open the popup automatically (to match the screenshot where it's open)
-        jmaInfoMarker.bindPopup(jmaPopupContent, { maxWidth: 'auto' }).openPopup();
-
-        // Add all track elements to a layer group and attribution
-        jmaTrackLayer.setAttribution('Cyclone data based on images from Japan Meteorological Agency. Track and forecast illustrative.');
-
-
-        // 8. ADD LAYER CONTROL (Top Right Menu)
+        // 7. ADD LAYER CONTROL (Top Right Menu)
         const baseMaps = {
             "Ocean Basemap": basemapGroup
         };
         const overlayMaps = {
             "Live Radar Data": radarLayer,
-            "JMA Cyclone Track (Sinlaku)": jmaTrackLayer, // New layer group
             "MET Malaysia TC Zone": tcZoneLayer,
             "5-Degree Grid": gridLayer
         };
         L.control.layers(baseMaps, overlayMaps, { position: 'topright' }).addTo(map);
 
-        // 9. ADD MAIN LEGEND (Always visible, position bottomright)
+        // 8. ADD MAIN LEGEND (Always visible)
         const mainLegend = L.control({ position: 'bottomright' });
         mainLegend.onAdd = function (map) {
             const div = L.DomUtil.create('div', 'info legend');
             div.innerHTML = `
                 <h4>Map Layers</h4>
-                <i class="legend-jma"></i> JMA Past Track<br>
-                <i class="legend-jma-forecast"></i> JMA Forecast Envelope<br>
                 <i class="legend-tc"></i> TC Watch Zone<br>
                 <i class="legend-grid"></i> 5-Degree Grid
             `;
@@ -320,7 +161,7 @@
         };
         mainLegend.addTo(map);
 
-        // 10. ADD SEPARATE RADAR LEGEND (Toggled, position bottomright)
+        // 9. ADD SEPARATE RADAR LEGEND (Toggled)
         const radarLegend = L.control({ position: 'bottomright' });
         radarLegend.onAdd = function (map) {
             const div = L.DomUtil.create('div', 'info radar-legend');
@@ -339,7 +180,7 @@
         // Add radar legend initially since radar layer is ON by default
         radarLegend.addTo(map);
 
-        // 11. TOGGLE RADAR LEGEND ON/OFF based on layer control checkbox
+        // 10. TOGGLE RADAR LEGEND ON/OFF based on layer control checkbox
         map.on('overlayadd', function(eventLayer) {
             if (eventLayer.name === 'Live Radar Data') {
                 radarLegend.addTo(map);
